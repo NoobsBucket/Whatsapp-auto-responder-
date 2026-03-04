@@ -358,41 +358,50 @@ async function startBot() {
         })
 
         sock.ev.on("messages.upsert", async ({ messages, type }) => {
-            try {
-                if (type !== "notify") return
+    try {
+        if (type !== "notify") return
 
-                const msg = messages[0]
-                if (!msg.message) return
+        const msg = messages[0]
+        if (!msg.message) return
 
-                const jid = msg.key.remoteJid
-                if (!jid) return
-                if (msg.key.fromMe) {
-                    recentlyReplied.set(jid, Date.now())
-                    console.log(`You replied to ${jid} — bot paused for 10 mins`)
-                    return
-                }
-                if (jid.endsWith("@g.us")) return
-                if (jid.endsWith("@broadcast")) return
-                if (myNumber && jid === myNumber) return
+        const jid = msg.key.remoteJid
+        if (!jid) return
 
-                const lastManualReply = recentlyReplied.get(jid)
-                if (lastManualReply && Date.now() - lastManualReply < MANUAL_REPLY_COOLDOWN) {
-                    console.log(`Skipping auto-reply to ${jid} — you replied manually recently`)
-                    return
-                }
-                console.log(`Message received from ${jid}`)
-                const waitTime = randomDelay()
-                console.log(`Waiting ${waitTime}ms before replying...`)
-                await delay(waitTime)
+        // ✅ If YOU sent a message, record it and skip auto-reply
+        if (msg.key.fromMe) {
+            recentlyReplied.set(jid, Date.now())
+            console.log(`📝 You replied to ${jid} — bot paused for 10 mins`)
+            return
+        }
 
-                const reply = getRandomReply()
-                await sock.sendMessage(jid, { text: reply })
-                console.log(`Auto-replied to ${jid} | hour: ${new Date().getHours()} | msg: "${reply}"`)
+        if (jid.endsWith("@g.us")) return
+        if (jid.endsWith("@broadcast")) return
+        if (myNumber && jid === myNumber) return
 
-            } catch (err) {
-                console.error("Message handler error:", err.message)
-            }
-        })
+        const lastManualReply = recentlyReplied.get(jid)
+        if (lastManualReply && Date.now() - lastManualReply < MANUAL_REPLY_COOLDOWN) {
+            console.log(`⏭️ Skipping auto-reply to ${jid} — you replied manually recently`)
+            return
+        }
+
+        console.log(`Message received from ${jid}`)
+        await sock.sendPresenceUpdate("composing", jid)
+
+        const waitTime = randomDelay()
+        console.log(`⏳ Waiting ${waitTime}ms before replying...`)
+        await delay(waitTime)
+
+
+        await sock.sendPresenceUpdate("paused", jid)
+
+        const reply = getRandomReply()
+        await sock.sendMessage(jid, { text: reply })
+        console.log(`✅ Auto-replied to ${jid} | hour: ${new Date().getHours()} | msg: "${reply}"`)
+
+    } catch (err) {
+        console.error("Message handler error:", err.message)
+    }
+})
 
     } catch (err) {
         console.error("startBot crashed:", err.message)
