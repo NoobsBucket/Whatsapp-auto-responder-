@@ -1,6 +1,6 @@
-const {
-    default: makeWASocket,
-    useMultiFileAuthState,
+const { 
+    default: makeWASocket, 
+    useMultiFileAuthState, 
     DisconnectReason,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
@@ -15,6 +15,10 @@ const http = require("http")
 const delay = (ms) => new Promise(res => setTimeout(res, ms))
 const randomDelay = () => Math.floor(Math.random() * (3000 - 500 + 1)) + 500
 
+// ✅ Track manual replies
+const recentlyReplied = new Map()
+const MANUAL_REPLY_COOLDOWN = 10 * 60 * 1000 // 10 minutes
+
 process.on("uncaughtException", (err) => {
     console.error("⚠️ Uncaught exception (ignored):", err.message)
 })
@@ -28,186 +32,191 @@ let myNumber = null
 let latestQR = null
 let isConnected = false
 
-// ✅ Time-based reply arrays
 const replies = {
     morning: {
         hours: { from: 6, to: 10 },
         messages: [
-            "kya mila yai sub ker kai haan:(",
-            "dhokaibaaz ho tum",
-            "apni property merai naam kerdo please",
-            "so jaa ",
-            "mai tou so raha tusi vi so jaow",
-            "aap ko kya lagata hai kon jetai gaa india yaa pakistan",
-            "or bataow melai babu nai thana thayaa aaa ",
-            "oo wrong number",
-            "subha Subha Message , Iss time yaa tou mai soo raha howga yaa tou university kai liyai nikal gaya hou ga",
-            "Ayo Jethalal itni subha subha message ker rahai hoo",
-            "aaj saturday hai yaa sunday ? ager hai tou !!! tub tou mai so raha huuu",
-            "Subha subha message? Bhai iss waqt yaa tou mai kambal mein mummy se 5 minute aur mang raha hou ga 😴",
+            "Kya mila yeh subha-subha 😅 :(",
+            "Dhokaibaaz ho tum 😏",
+            "Apni property mera naam kar do please 🏡",
+            "So jaa 😴",
+            "Main tou so raha, tusi vi so jao 😌",
+            "Aapko kya lagta hai, kon jeetega India ya Pakistan? 🇮🇳🇵🇰",
+            "Aur batao, mela babu nahi thana thaya aa? 😂",
+            "Oo wrong number 🤷‍♂️",
+            "Subha subha message? Iss waqt ya tou mai so raha hou ga ya tou university ke liye nikal gaya hou ga 🏃‍♂️💨",
+            "Ayo Jethalal itni subha subha message kar rahe ho 😭",
+            "Aaj Saturday hai ya Sunday? Agar hai tou mai so raha huuu 😴",
+            "Bhai iss waqt ya tou mai kambal mein mummy se 5 minute aur mang raha hou ga 😆",
             "Bro itni subha kaun active hota hai? Sirf doodh wala aur tension 😭",
-            "Ager aaj weekday hai tou on my way chasing the attendance lala late ho jeyega mai class kai liyai 🏃‍♂️💨",
-            "Ager Saturday hai tou mai alarm ko ignore kar gadhai ghodai bech ker so raha hoo 😌",
+            "On my way chasing attendance, lala late ho jayega 🏃‍♂️💨",
+            "Agar Saturday hai tou mai alarm ignore kar ke so raha hoo 😌",
             "Subha ka message dekh kar mera phone bhi kehta hai 'bhai baad mein' 📵",
-            "Itni subha message ker ke kya hasil karna chahte ho Jethalal ji? 😏",
-            "Is time ya tou mai dream mein billionaire hou ga ya attendance ke liye struggle 😭 life so hard lala",
-            "Is waqt sirf do log jaag rahe hote hain: doodh wala aur tum. Dono sone dai mujhey lala 😭",
-            "la lala lalal ree re ga ma dhaa ne saa ma pa re so nai dai re jehtalal",
-            "Aaeyai aap ka intezar hai",
-            "Ager Sunday hai tou mai officially duniya se offline ho 🌍❌",
-            "itni subha subha message kerne walay log secretly aliens hote hain 👽",
-            "Is waqt mai ya tou ready ho raha hou ga ya phir ready hone ka drama kar raha hou ga 🤡",
-            "Ager emergency nahi hai tou shaam tak wait karlo reply kerdoga otherwise call kerlo 😌 gg bilkul ignore ker raha huu"
+            "Itni subha message karke kya hasil karna chahte ho Jethalal ji? 😏",
+            "Dream mein billionaire hou ga ya attendance ke liye struggle 😭 life so hard lala",
+            "Is waqt sirf do log jaag rahe hote hain: doodh wala aur tum 😭",
+            "La lala lalal ree re ga, ma dhaa ne saa ma pa re, so nai dai re Jehtalal 🎶",
+            "Aaeyai, aap ka intezar hai 😎",
+            "Agar Sunday hai tou mai officially duniya se offline ho 🌍❌",
+            "Itni subha-subha message karne walay log secretly aliens hote hain 👽",
+            "Ready ho raha hou ya ready hone ka drama kar raha hou ga 🤡",
+            "Agar emergency nahi hai tou shaam tak wait karlo, otherwise call kar lo 😌 gg bilkul ignore kar raha huu"
         ]
     },
     afternoon: {
         hours: { from: 10, to: 15 },
         messages: [
-            "kya mila yai sub ker kai haan:(",
-            "dhokaibaaz ho tum",
-            "apni property merai naam kerdo please",
-            "so jaa ",
-            "mai tou so raha tusi vi so jaow",
-            "aap ko kya lagata hai kon jetai gaa india yaa pakistan",
-            "or bataow melai babu nai thana thayaa aaa ",
-            "oo wrong number",
-            "class time class kai baad he message keroga",
-            "In class rn! 📖 message keorga baad mein",
-            "call kerlo ager internet off hai tou samjh jaow university mai idher udher feriya maar raha houga",
-            "haye re haye re haye haye haye haye haye",
-            "mai tera jabra fan hogaya",
-            "sahi kehtai hain log",
-            "4 log kya kehai gai ",
-            "sharam tou nahi aati naa",
-            "fhir khenaa bota gaala kad da vaa",
-            "or bataow khana khayaa",
-            "na munna naa",
-            "ohh please tang mut kero",
-            "joke sunai ga",
-            "free fire khelaiga",
-            "kya baat hai bataow bataow",
-            "hnn tou ki haal chaal dosto mai ho neon man",
-            "tum he ho abb tum he hoo",
-            "mera assignment likh do please",
-            "mirza ghalib ko aam pasand thai",
-            "wo aap ki kidneys mil jati tou !! ahm ahmm",
-            "merai paisa kub lota raha hai bhai ?!!",
-            "wo mai keh rha tha ki",
-            "hairfall ho raha hai reee",
-            "hathi udda",
-            "aik titli udnai lagi udd naa saki mujhe nahi yaad wo peom yaar",
-            "yai mai kya suun raha hoo",
-            "tappu tou school kyu nahi gaya",
-            "why this kolaveri kolaveri di"
+            "Kya mila yeh sub kar ke 😅 :(",
+            "Dhokaibaaz ho tum 😏",
+            "Apni property mera naam kar do please 🏡",
+            "So jaa 😴",
+            "Main tou so raha, tusi vi so jao 😌",
+            "Aapko kya lagta hai, kon jeetega India ya Pakistan? 🇮🇳🇵🇰",
+            "Aur batao, mela babu nahi thana thaya aa? 😂",
+            "Oo wrong number 🤷‍♂️",
+            "Class time hai, baad mein message karunga 📖",
+            "In class rn! Message baad mein karenge 🙈",
+            "Call kar lo agar internet off hai, university mein idher udher ghoom raha houga 📚",
+            "Haye re haye re haye 😅",
+            "Main tera jabra fan ho gaya 😎",
+            "Sahi kehte hain log 👍",
+            "Chaar log kya kehte gaye? 🤔",
+            "Sharam tou nahi aati naa 😏",
+            "Phir khana bota gaala kad da vaa 🍲",
+            "Aur batao, khana khaya? 🍽️",
+            "Na Munna na 😅",
+            "Ohh please tang mat karo 🙏",
+            "Joke sunao 😆",
+            "Free Fire khelaiga? 🔥",
+            "Kya baat hai, batao batao 🤩",
+            "Hnn tou, ki haal chaal dosto? 😎",
+            "Tum he ho ab, tum he ho 😏",
+            "Mera assignment likh do please 📄",
+            "Mirza Ghalib ko aam pasand the 🍎",
+            "Wo aapki kidneys mil jati tou!! 😱",
+            "Mera paisa kab lota raha hai bhai? 💸",
+            "Wo mai keh raha tha ki… 🤔",
+            "Hairfall ho raha hai reee 😩",
+            "Hathi ud gaya 🐘",
+            "Aik titli udni lagi, udd na saki… mujhe nahi yaad wo poem yaar 🦋",
+            "Yai mai kya sun raha hou 🤷‍♂️",
+            "Tappu tou school kyu nahi gaya? 🏫",
+            "Why this kolaveri kolaveri di? 🎶"
         ]
     },
     evening: {
         hours: { from: 15, to: 20 },
         messages: [
-            "kya mila yai sub ker kai haan:(",
-            "dhokaibaaz ho tum",
-            "apni property merai naam kerdo please",
-            "so jaa ",
-            "mai tou so raha tusi vi so jaow",
-            "aap ko kya lagata hai kon jetai gaa india yaa pakistan",
-            "or bataow melai babu nai thana thayaa aaa ",
-            "oo wrong number",
-            "yai mai kya suun raha hoo",
-            "tappu tou school kyu nahi gaya",
-            "why this kolaveri kolaveri di",
-            "Aww are you okeyy bacha !? call keru :)",
-            "wesai tou mai kabhi nahi padhta lekien as a bahana it is very good excuse dekh lala padhnai dai mujhe",
-            "acting kai badhshah jo ji",
-            "sonai dai mujhe",
-            "ohh !!! munna please kaam kernai doo 🙏",
-            "munna please sonai doo",
-            "munna please khana khani doo",
-            "merai pass or sabd nahi hain , mai chhuti chaahata huu",
-            "kya howa reply nahi ker raha huuu mai , asal mai i have no awnser for this",
-            "merai pasiay kub dega bai",
-            "kesa laga mera mazakkkkkkkkk",
-            "our bataow chai peogai",
-            "baby are you fine ?",
-            "aag lagai basti mai jaat dont care",
-            "i know im annoying",
-            "choti bachi ho kya",
-            "samjh nahi aata kya jethalaal",
-            "kya itna bura hu mai maa",
-            "bus meri bus ho gayi hai",
-            "life so hard rn ! aap ki kideny mil sukti hai kya"
+            "Kya mila yeh sub kar ke 😅",
+            "Dhokaibaaz ho tum :(",
+            "Apni property mera naam kar do please 🏡",
+            "So jaa 😴",
+            "Main tou so raha, tusi vi so jao 😌",
+            "Aapko kya lagta hai, kon jeetega India ya Pakistan? ",
+            "Aur batao, melai babu nahi thana thaya aa? 😂",
+            "Oo wrong number 🤷‍♂️",
+            "Yai Duniya Chouk Kaha hai",
+            "Bhaiya ternol Jaanai kaa kitna logai",
+            "Awwwwwwwwwww",
+            "Dhoom macha lai dhoom",
+            "Kirish Ka gana sunai ga",
+            "Software glitch aa raha",
+            "Mai kiya laadlai",
+            "Yai mai kya sun raha hou 🤔",
+            "Tappu tou school kyu nahi gaya? 🏫",
+            "Why this kolaveri kolaveri di? 🎶",
+            "Aww are you okay bacha? Call karu :) ❤️",
+            "Waisay tou mai kabhi nahi padhta, lekin excuse acha hai 😅",
+            "Acting ka badshah hou mai 😎",
+            "Sona dai mujhe 😴",
+            "Ohh !!! Munna please kaam karne do 🙏",
+            "Munna please sonai do 😴",
+            "Munna please khana khanai do 🍲",
+            "Mere paas aur shabd nahi hain, mai chhuti chahta hou 😌",
+            "Kya hua, reply nahi kar raha huuu? Asal mai I have no answer 😅",
+            "Mere paisay kab dega bai? 💸",
+            "Kaisa laga mera mazakkkkkkkkk 😆",
+            "Aur batao, chai peogai? ☕",
+            "Baby are you fine? 😘",
+            "Aag lagai basti mai, jaat don't care 🔥",
+            "I know I'm annoying 😜",
+            "Choti bachi ho kya? 🤭",
+            "Samajh nahi aata kya Jethalal? 🤔",
+            "Kya itna bura hu mai maa? 😅",
+            "Bus meri bus ho gayi hai 🚌",
+            "Life so hard rn! Aapki kidney mil sakti hai kya? 😭"
         ]
     },
     night: {
         hours: { from: 20, to: 24 },
         messages: [
-            "kya mila yai sub ker kai haan:(",
-            "dhokaibaaz ho tum",
-            "apni property merai naam kerdo please",
-            "so jaa ",
-            "mai tou so raha tusi vi so jaow",
-            "aap ko kya lagata hai kon jetai gaa india yaa pakistan",
-            "or bataow melai babu nai thana thayaa aaa ",
-            "oo wrong number",
-            "yai mai kya suun raha hoo",
-            "tappu tou school kyu nahi gaya",
-            "why this kolaveri kolaveri di",
-            "life so hard rn ! aap ki kideny mil sukti hai kya",
-            "rakh phone rakh sone jaa",
-            "sone dai bahi",
-            "aap ko neend nahi aati kya",
-            "abhi tuk jaag rahai hoo",
-            "why this kolaveri kolaveri di !!",
-            "kya aap kai toothpaste mai namak hai",
-            "10 mai sai 12 dentist ka bharosa colgate",
-            "sonai ja sonai",
-            "kya aap ko pata hai 2+2 = 67 ",
-            "waow kya baat hai jethalal",
-            "come on superman say your stupid line",
-            "mera assignment likh do please",
-            "wo din bhi kya din thai",
-            "haan tou ki haal chaal mitro ",
-            "mitro khaow piyo aaish kero",
-            "mujhe aap sai baat nahi kerni mai naraz huu ;(",
-            "one day i will be phamous",
-            "sorry kya kaha sunayi nahi diya mujhe",
-            "bahi sahaab re ",
-            "why this kolaveri kolaveri di",
-            "choti bachi ho kya",
-            "wohe 100-200 millon daaler ki diket"
+            "Kya mila yeh sub kar ke 😅 :(",
+            "Dhokaibaaz ho tum 😏",
+            "Apni property mera naam kar do please 🏡",
+            "So jaa 😴",
+            "Main tou so raha, tusi vi so jao 😌",
+            "Aapko kya lagta hai, kon jeetega India ya Pakistan? 🇮🇳🇵🇰",
+            "Aur batao, mela babu nahi thana thaya aa? 😂",
+            "Oo wrong number 🤷‍♂️",
+            "Yai mai kya sun raha hou 🤔",
+            "Tappu tou school kyu nahi gaya? 🏫",
+            "Why this kolaveri kolaveri di? 🎶",
+            "Life so hard rn! Aapki kidney mil sakti hai kya? 😭",
+            "Rakh phone rakh, sone jaa 😴",
+            "Sone dai bahi 😌",
+            "Aapko neend nahi aati kya? 🛌",
+            "Abhi tak jaag rahe ho? 😅",
+            "Why this kolaveri kolaveri di!! 🎶",
+            "Kya aapke toothpaste me namak hai? 😳",
+            "10 mai se 12 dentist ka bharosa Colgate 😆",
+            "Sona jaa sona 😴",
+            "Kya aapko pata hai 2+2 = 67? 🤯",
+            "Waow kya baat hai Jethalal 😎",
+            "Come on Superman, say your stupid line 🦸‍♂️",
+            "Mera assignment likh do please 📄",
+            "Wo din bhi kya din the 😅",
+            "Haan tou ki haal chaal mitro? 😎",
+            "Mitro, khao piyo, aaish karo 🍽️",
+            "Mujhe aap se baat nahi karni, mai naraz hu ;(",
+            "One day I will be famous 😎",
+            "Sorry, kya kaha? Sunayi nahi diya mujhe 😅",
+            "Bahi sahaab re 😎",
+            "Why this kolaveri kolaveri di 🎶",
+            "Choti bachi ho kya? 🤭",
+            "Wohe 100-200 million dollar ki dikkat 💸"
         ]
     },
     latenight: {
         hours: { from: 0, to: 6 },
         messages: [
-            "kya mila yai sub ker kai haan:(",
-            "dhokaibaaz ho tum",
-            "apni property merai naam kerdo please",
-            "so jaa ",
-            "mai tou so raha tusi vi so jaow",
-            "aap ko kya lagata hai kon jetai gaa india yaa pakistan",
-            "or bataow melai babu nai thana thayaa aaa ",
-            "oo wrong number",
-            "merai pass or sabd nahi hain , mai chhuti chaahata huu",
-            "kya howa reply nahi ker raha huuu mai , asal mai i have no awnser for this",
-            "merai pasiay kub dega bai",
-            "kesa laga mera mazakkkkkkkkk",
-            "our bataow chai peogai",
-            "baby are you fine ?",
-            "sonai ja sonai",
-            "kya aap ko pata hai 2+2 = 67 ",
-            "waow kya baat hai jethalal",
-            "come on superman say your stupid line",
-            "mera assignment likh do please",
-            "wo din bhi kya din thai",
-            "haan tou ki haal chaal mitro ",
-            "mitro khaow piyo aaish kero",
-            "mujhe aap sai baat nahi kerni mai naraz huu ;(",
-            "one day i will be phamous",
+            "Kya mila yeh sub kar ke 😅 :(",
+            "Dhokaibaaz ho tum 😏",
+            "Apni property mera naam kar do please 🏡",
+            "So jaa 😴",
+            "Main tou so raha, tusi vi so jao 😌",
+            "Aapko kya lagta hai, kon jeetega India ya Pakistan? 🇮🇳🇵🇰",
+            "Aur batao, mela babu nahi thana thaya aa? 😂",
+            "Oo wrong number 🤷‍♂️",
+            "Mere paas aur shabd nahi hain, mai chhuti chahta hou 😌",
+            "Kya hua, reply nahi kar raha huuu? Asal mai I have no answer 😅",
+            "Mere paisay kab dega bai? 💸",
+            "Kaisa laga mera mazakkkkkkkkk 😆",
+            "Aur batao, chai peogai? ☕",
+            "Baby are you fine? 😘",
+            "Sona jaa sona 😴",
+            "Kya aapko pata hai 2+2 = 67? 🤯",
+            "Waow kya baat hai Jethalal 😎",
+            "Come on Superman, say your stupid line 🦸‍♂️",
+            "Mera assignment likh do please 📄",
+            "Wo din bhi kya din the 😅",
+            "Haan tou ki haal chaal mitro? 😎",
+            "Mitro, khao piyo, aaish karo 🍽️",
+            "Mujhe aap se baat nahi karni, mai naraz hu ;(",
+            "One day I will be famous 😎",
             "Itni raat ko text? Ya tou breakup hua hai ya tum bore ho 😭",
-            "Itni raat ko! 😱 Sab theek hai? call keru!",
+            "Itni raat ko! 😱 Sab theek hai? Call karu?",
             "Are you okay bacha ??",
             "Sleeping zzzz 😴 reply in the morning!"
-
         ]
     }
 }
@@ -221,12 +230,13 @@ function getRandomReply() {
     return messages[Math.floor(Math.random() * messages.length)]
 }
 
+
 const server = http.createServer(async (req, res) => {
     if (isConnected) {
         res.writeHead(200, { "Content-Type": "text/html" })
         res.end(`
             <html><body style="font-family:sans-serif;text-align:center;padding:50px">
-                <h1 style="color:green">✅ Bot is Connected!</h1>
+                <h1 style="color:green"> Bot is Connected!</h1>
                 <p>WhatsApp bot is running successfully.</p>
                 <p>Number: ${myNumber}</p>
             </body></html>
@@ -239,7 +249,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { "Content-Type": "text/html" })
         res.end(`
             <html><body style="font-family:sans-serif;text-align:center;padding:50px">
-                <h1>📱 Scan QR Code with WhatsApp</h1>
+                <h1>Scan QR Code with WhatsApp</h1>
                 <p>Open WhatsApp → Linked Devices → Link a Device</p>
                 <img src="${qrImage}" style="width:300px;height:300px"/>
                 <p><small>Page auto-refreshes every 10 seconds</small></p>
@@ -252,7 +262,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type": "text/html" })
     res.end(`
         <html><body style="font-family:sans-serif;text-align:center;padding:50px">
-            <h1>⏳ Starting bot...</h1>
+            <h1>Starting bot...</h1>
             <p>Please wait, QR code will appear here shortly.</p>
             <script>setTimeout(() => location.reload(), 3000)</script>
         </body></html>
@@ -261,8 +271,8 @@ const server = http.createServer(async (req, res) => {
 
 const PORT = process.env.PORT || 3000
 server.listen(PORT, () => {
-    console.log(`🌐 Web server running on port ${PORT}`)
-    console.log(`👉 Open your Railway URL to scan the QR code`)
+    console.log(`Web server running on port ${PORT}`)
+    console.log(` Open your Railway URL to scan the QR code`)
 })
 
 async function startBot() {
@@ -329,7 +339,7 @@ async function startBot() {
             } else if (connection === "open") {
                 isConnected = true
                 latestQR = null
-                console.log("✅ Connected to WhatsApp successfully!")
+                console.log("Connected to WhatsApp successfully!")
 
                 myNumber = sock.user?.id?.split(":")[0] + "@s.whatsapp.net"
                 console.log(`Bot number: ${myNumber}`)
@@ -337,9 +347,9 @@ async function startBot() {
                 healthCheckInterval = setInterval(async () => {
                     try {
                         await sock.sendPresenceUpdate("available")
-                        console.log("💓 Heartbeat OK")
+                        console.log("Heartbeat OK")
                     } catch (err) {
-                        console.log("💔 Heartbeat failed, reconnecting...")
+                        console.log("Heartbeat failed, reconnecting...")
                         clearInterval(healthCheckInterval)
                         setTimeout(startBot, 3000)
                     }
@@ -353,23 +363,31 @@ async function startBot() {
 
                 const msg = messages[0]
                 if (!msg.message) return
-                if (msg.key.fromMe) return
 
                 const jid = msg.key.remoteJid
                 if (!jid) return
+                if (msg.key.fromMe) {
+                    recentlyReplied.set(jid, Date.now())
+                    console.log(`You replied to ${jid} — bot paused for 10 mins`)
+                    return
+                }
                 if (jid.endsWith("@g.us")) return
                 if (jid.endsWith("@broadcast")) return
                 if (myNumber && jid === myNumber) return
 
+                const lastManualReply = recentlyReplied.get(jid)
+                if (lastManualReply && Date.now() - lastManualReply < MANUAL_REPLY_COOLDOWN) {
+                    console.log(`Skipping auto-reply to ${jid} — you replied manually recently`)
+                    return
+                }
                 console.log(`Message received from ${jid}`)
-
                 const waitTime = randomDelay()
-                console.log(`⏳ Waiting ${waitTime}ms before replying...`)
+                console.log(`Waiting ${waitTime}ms before replying...`)
                 await delay(waitTime)
 
                 const reply = getRandomReply()
                 await sock.sendMessage(jid, { text: reply })
-                console.log(`✅ Auto-replied to ${jid} | hour: ${new Date().getHours()} | msg: "${reply}"`)
+                console.log(`Auto-replied to ${jid} | hour: ${new Date().getHours()} | msg: "${reply}"`)
 
             } catch (err) {
                 console.error("Message handler error:", err.message)
